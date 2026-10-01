@@ -130,35 +130,6 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 226, 150, 0.8);
 }
 
-/* 体感开关：仅 iOS 等需要授权的浏览器出现 */
-.sensor-btn {
-  display: inline-block;
-  margin-top: 12px;
-  padding: 7px 20px;
-  font: inherit;
-  letter-spacing: 0.22em;
-  text-indent: 0.22em;
-  color: rgba(248, 220, 150, 0.92);
-  background: rgba(255, 210, 110, 0.07);
-  border: 1px solid rgba(240, 204, 116, 0.5);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.sensor-btn:hover,
-.sensor-btn:focus-visible {
-  color: #fbe9b8;
-  border-color: rgba(255, 226, 150, 0.95);
-  box-shadow: 0 0 14px rgba(255, 208, 100, 0.35);
-}
-
-.sensor-btn:focus-visible {
-  outline: none;
-}
-
-.sensor-btn[hidden] { display: none; }
-
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
@@ -634,6 +605,6 @@ body {
   .float { animation: none; }
   .flag-shine { animation: none; transform: none; opacity: 0; }
   .page-head, .page-foot { animation: none; }
-  .foot-icon, .sensor-btn { transition: none; }
+  .foot-icon { transition: none; }
   .foot-icon:hover { transform: none; }
 }

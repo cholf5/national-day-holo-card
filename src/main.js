@@ -93,12 +93,12 @@
   }
 
   /* ------------------------------------------------ 陀螺仪体感（移动端） */
-  // 手机倾斜 → 换算成与指针同一套弹簧目标（pxT/pyT），弹簧/光效/国徽流光全部复用；
-  // 基准（零点）取激活时的持机姿势，之后每帧缓慢回中：动则有反应，停稳约一秒即归位。
-  const sensorBtn = $('#sensorBtn');
+  // 手机倾斜 → 换算成与指针同一套弹簧目标（pxT/pyT），弹簧/光效/国徽流光全部复用。
+  // 桌面端直接不启用；触屏设备自动开启。iOS 因系统硬性要求，授权挂在首次轻点上
+  // 静默申请（拒绝则不再打扰），除此之外无任何界面开关。
   const footHint = $('#footHint');
-  const SENSOR_RANGE = 35;   // 倾斜多少度达到满偏
-  const SENSOR_DEAD = 1.5;   // 死区：滤掉手持微抖
+  const SENSOR_RANGE = 24;   // 倾斜多少度达到满偏（越小越灵敏）
+  const SENSOR_DEAD = 1.2;   // 死区：滤掉手持微抖
   const axis = d =>
     clamp((Math.abs(d) < SENSOR_DEAD ? 0 : d - Math.sign(d) * SENSOR_DEAD) / SENSOR_RANGE, -1, 1);
   let sensorOn = false;         // 收到首个有效读数后置位
@@ -112,7 +112,6 @@
       sensorOn = true;
       baseB = rawB; baseG = rawG;   // 以当前持机姿势为零点
       if (footHint) footHint.innerHTML = '<b>倾斜手机</b> 光影随动 &nbsp;·&nbsp; <b>轻点</b> 翻面';
-      if (sensorBtn) sensorBtn.hidden = true;
     }
     // 按屏幕旋转角换算倾斜轴（角度 = 内容补偿角）
     const ang = (screen.orientation && typeof screen.orientation.angle === 'number')
@@ -126,25 +125,21 @@
     pyT = axis(dy);
   }
 
-  if (window.DeviceOrientationEvent && !reduced) {
+  const motionDevice =
+    matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (motionDevice && window.DeviceOrientationEvent && !reduced) {
     const DOP = window.DeviceOrientationEvent;
+    const start = () => addEventListener('deviceorientation', onOrient);
     if (typeof DOP.requestPermission === 'function') {
-      // iOS 13+：授权必须由用户手势触发，页脚放一个开关
-      sensorBtn.hidden = false;
-      sensorBtn.addEventListener('click', () => {
-        DOP.requestPermission().then(state => {
-          if (state === 'granted') {
-            addEventListener('deviceorientation', onOrient);
-            sensorBtn.hidden = true;
-          } else {
-            sensorBtn.textContent = '体感未授权';
-            setTimeout(() => { sensorBtn.hidden = true; sensorBtn.textContent = '开启体感'; }, 2600);
-          }
-        }).catch(() => { sensorBtn.hidden = true; });  // 非安全上下文（如 http）拿不到授权，静默回退
+      // iOS 13+：授权必须由用户手势触发——首次轻点页面时静默申请
+      let asked = false;
+      addEventListener('pointerdown', () => {
+        if (asked) return;
+        asked = true;
+        DOP.requestPermission().then(s => { if (s === 'granted') start(); }).catch(() => {});
       });
     } else {
-      // Android 等免授权平台：直接监听，收到有效读数即激活
-      addEventListener('deviceorientation', onOrient);
+      start();
     }
     addEventListener('orientationchange', () => {
       if (sensorOn && rawB != null) { baseB = rawB; baseG = rawG; }
@@ -233,11 +228,13 @@
     px += (pxT - px) * 0.14;
     py += (pyT - py) * 0.14;
 
-    // 体感基准回中：按真实时间衰减（约 1.1 秒时间常数），动则有反应，停稳即归位
+    // 体感基准回中：贴近零位时快速归零；明显倾斜时基本保持姿
+    // 势（仅每 15 秒缓慢校正，消除持机姿势漂移），按真实时间衰减与刷新率无关
     const dt = Math.min(64, t - (lastT || t));
     lastT = t;
     if (sensorOn && rawB != null) {
-      const k = 1 - Math.exp(-dt * 0.0009);
+      const near = Math.abs(rawB - baseB) < 2.5 && Math.abs(rawG - baseG) < 2.5;
+      const k = 1 - Math.exp(-dt / (near ? 600 : 15000));
       baseB += (rawB - baseB) * k;
       baseG += (rawG - baseG) * k;
     }
