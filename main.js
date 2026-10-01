@@ -60,6 +60,7 @@
   let px = 0, py = 0;           // 平滑后的指针
   let hovering = false, pressed = false, flipped = false;
   let act = 0;                  // 点亮程度 0..1：悬停恒亮，体感随倾角起伏、静止回落
+  let lastT = 0;                // 上一帧时间戳（体感回中用真实时间，避免受刷新率影响）
   const rx = { x: 6, v: 0 };    // rotateX 弹簧
   const ry = { y: -38, v: 0 };  // rotateY 弹簧（初始偏转，入场回弹）
   let scale = 0.94, tz = -46;   // 入场时略小略远
@@ -232,10 +233,13 @@
     px += (pxT - px) * 0.14;
     py += (pyT - py) * 0.14;
 
-    // 体感基准回中：手机停稳后卡牌自动回到静置（动则有反应，停即归位）
+    // 体感基准回中：按真实时间衰减（约 1.1 秒时间常数），动则有反应，停稳即归位
+    const dt = Math.min(64, t - (lastT || t));
+    lastT = t;
     if (sensorOn && rawB != null) {
-      baseB += (rawB - baseB) * 0.015;
-      baseG += (rawG - baseG) * 0.015;
+      const k = 1 - Math.exp(-dt * 0.0009);
+      baseB += (rawB - baseB) * k;
+      baseG += (rawG - baseG) * k;
     }
 
     // 点亮程度：悬停恒亮；体感看倾角幅度，静止回落
