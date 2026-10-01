@@ -52,6 +52,7 @@ src/style.css         卡体 3D、全息层、浮雕、版式
 src/main.js           弹簧物理、指针光效、粒子礼花
 assets/               生成的独立 SVG
 vendor/               国徽原始素材
+LICENSE               MIT 许可证
 ```
 
 支持 `prefers-reduced-motion`（静态呈现）、键盘翻面（Tab + Enter/空格）。
@@ -60,5 +61,5 @@ vendor/               国徽原始素材
 
 - 国徽原始矢量来自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:National_Emblem_of_the_People%27s_Republic_of_China.svg)（公有领域）。
 - 本项目为个人节日贺卡练习。国旗、国徽图案的使用请遵循《国旗法》《国徽法》相关规定（不得用于商标、商业广告等）。
-- License 建议选 MIT（代码），矢量素材遵循其原始授权。
+- 代码采用 [MIT License](LICENSE) 授权；矢量素材遵循其原始授权（国徽原始矢量为公有领域）。
 

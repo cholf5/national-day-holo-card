@@ -130,6 +130,35 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 226, 150, 0.8);
 }
 
+/* 体感开关：仅 iOS 等需要授权的浏览器出现 */
+.sensor-btn {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 7px 20px;
+  font: inherit;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  color: rgba(248, 220, 150, 0.92);
+  background: rgba(255, 210, 110, 0.07);
+  border: 1px solid rgba(240, 204, 116, 0.5);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.sensor-btn:hover,
+.sensor-btn:focus-visible {
+  color: #fbe9b8;
+  border-color: rgba(255, 226, 150, 0.95);
+  box-shadow: 0 0 14px rgba(255, 208, 100, 0.35);
+}
+
+.sensor-btn:focus-visible {
+  outline: none;
+}
+
+.sensor-btn[hidden] { display: none; }
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
@@ -476,6 +505,29 @@ body {
 .face--back .holo  { opacity: calc(var(--holo-o, 0) * 0.42); }
 .face--back .glare { opacity: calc(var(--glare-o, 0) * 0.8); }
 
+/* 镜面反射带：以国徽形状为遮罩，一条亮带随指针扫过所有金属（含帘子） */
+.emblem-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: var(--sheen-o, 0.4);
+  background: linear-gradient(115deg,
+    transparent 34%,
+    rgba(255, 242, 196, 0.3) 44%,
+    rgba(255, 253, 236, 0.65) 50%,
+    rgba(255, 242, 196, 0.3) 56%,
+    transparent 66%);
+  background-size: 240% 240%;
+  background-position: var(--sheen-x, 50%) var(--sheen-y, 50%);
+  -webkit-mask-image: url("assets/emblem-gold.svg");
+  mask-image: url("assets/emblem-gold.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
 /* 首饰般的星芒 glint（四芒星，错峰闪烁） */
 .emblem-sparks {
   position: absolute;
@@ -582,6 +634,6 @@ body {
   .float { animation: none; }
   .flag-shine { animation: none; transform: none; opacity: 0; }
   .page-head, .page-foot { animation: none; }
-  .foot-icon { transition: none; }
+  .foot-icon, .sensor-btn { transition: none; }
   .foot-icon:hover { transform: none; }
 }

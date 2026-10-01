@@ -64,6 +64,19 @@ GRADIENT_DEFS = """<defs>
     <stop offset=".78" stop-color="#9c6a0e"/>
     <stop offset="1"   stop-color="#6b4608"/>
   </radialGradient>
+  <!-- 底部绶带：纵向明暗交替的褶皱带，光来自上方 -->
+  <linearGradient id="ribbonGold" gradientUnits="userSpaceOnUse"
+      x1="300" y1="530" x2="430" y2="800">
+    <stop offset="0"    stop-color="#ffe59a"/>
+    <stop offset=".14"  stop-color="#f2c14e"/>
+    <stop offset=".28"  stop-color="#a87208"/>
+    <stop offset=".4"   stop-color="#ffd85e"/>
+    <stop offset=".52"  stop-color="#8f5f08"/>
+    <stop offset=".64"  stop-color="#f5c951"/>
+    <stop offset=".78"  stop-color="#c08414"/>
+    <stop offset=".9"   stop-color="#8a5c0a"/>
+    <stop offset="1"    stop-color="#6b4608"/>
+  </linearGradient>
   <!-- 浮雕：alpha 通道作高度图，左上光源的漫反射 + 锐利星芒高光（sRGB 色彩空间保住金色饱和度） -->
   <filter id="relief" x="-8%" y="-8%" width="116%" height="116%"
       color-interpolation-filters="sRGB">
@@ -97,9 +110,18 @@ def build_emblem() -> str:
     # 去掉注释与 inkscape/sodipodi 私有属性
     inner = re.sub(r"<!--.*?-->", "", inner, flags=re.S)
     inner = re.sub(r'\s(?:inkscape|sodipodi):[\w-]+="[^"]*"', "", inner)
-    # 金属化重着色：金 -> 金属渐变，红 -> 古铜金，黑描边 -> 雕刻深褐，白 -> 亮金
+    # 金属化重着色。红色部件分两类（源自对 vendor 文件的逐件定位）：
+    #   - 背景大圆盘：唯一一个 <ellipse>（viewBox 中央 ~539x539）→ 径向穹顶渐变
+    #   - 底部绶带家族：6 片 <path>（左右垂尾 / 横向帘带 / 中央绶结 / 两条斜帔）→ 纵向褶皱带渐变
+    def _recolor_red(m: "re.Match[str]") -> str:
+        tag = m.group(0)
+        if "fill:#de2910" not in tag:
+            return tag
+        grad = "bronzeDeep" if tag.lstrip().startswith("<ellipse") else "ribbonGold"
+        return tag.replace("fill:#de2910", f"fill:url(#{grad})")
+
+    inner = re.sub(r"<(?:path|ellipse)\b[^>]*>", _recolor_red, inner)
     inner = inner.replace("fill:#ffde00", "fill:url(#goldMetal)")
-    inner = inner.replace("fill:#de2910", "fill:url(#bronzeDeep)")
     inner = inner.replace("stroke:#000000", "stroke:#33200a")
     inner = inner.replace("stroke:black", "stroke:#33200a")
     inner = inner.replace("fill:#FEFEFE", "fill:#ffe9a8")
@@ -112,10 +134,15 @@ def build_emblem() -> str:
 
 # ---------------------------------------------------------------- 组装
 def build_html(flag: str, emblem: str) -> str:
+    import time
     with open(os.path.join(ROOT, "src", "template.html"), encoding="utf-8") as f:
         html = f.read()
     html = html.replace("<!--INLINE:FLAG-->", flag)
     html = html.replace("<!--INLINE:EMBLEM-->", emblem)
+    # 时间戳缓存穿透：本地反复改版时避免浏览器用旧的 css/js
+    stamp = str(int(time.time()))
+    html = html.replace('href="style.css"', f'href="style.css?v={stamp}"')
+    html = html.replace('src="main.js"', f'src="main.js?v={stamp}"')
     return html
 
 

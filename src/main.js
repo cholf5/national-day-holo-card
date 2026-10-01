@@ -59,17 +59,23 @@
   let pxT = 0, pyT = 0;         // 指针目标位置 (-1..1)
   let px = 0, py = 0;           // 平滑后的指针
   let hovering = false, pressed = false, flipped = false;
+  let act = 0;                  // 点亮程度 0..1：悬停恒亮，体感随倾角起伏、静止回落
+  let lastT = 0;                // 上一帧时间戳（体感回中用真实时间，避免受刷新率影响）
   const rx = { x: 6, v: 0 };    // rotateX 弹簧
   const ry = { y: -38, v: 0 };  // rotateY 弹簧（初始偏转，入场回弹）
   let scale = 0.94, tz = -46;   // 入场时略小略远
 
   stage.addEventListener('pointermove', e => {
+    if (sensorOn && e.pointerType === 'touch') return;   // 体感已接管触屏拖动
     const r = tilt.getBoundingClientRect();
     pxT = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
     pyT = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
     hovering = true;
   });
-  stage.addEventListener('pointerleave', () => { hovering = false; pressed = false; pxT = 0; pyT = 0; });
+  stage.addEventListener('pointerleave', e => {
+    if (sensorOn && e.pointerType === 'touch') return;
+    hovering = false; pressed = false; pxT = 0; pyT = 0;
+  });
   card3d.addEventListener('pointerdown', () => { pressed = true; });
   addEventListener('pointerup', () => { pressed = false; });
   if (!reduced) {
@@ -84,6 +90,65 @@
     ry.v += flipped ? 9 : -9;   // 翻面附加冲量，弹簧会带出甩动感
     burstAtCard();
     card3d.setAttribute('aria-pressed', String(flipped));
+  }
+
+  /* ------------------------------------------------ 陀螺仪体感（移动端） */
+  // 手机倾斜 → 换算成与指针同一套弹簧目标（pxT/pyT），弹簧/光效/国徽流光全部复用；
+  // 基准（零点）取激活时的持机姿势，之后每帧缓慢回中：动则有反应，停稳约一秒即归位。
+  const sensorBtn = $('#sensorBtn');
+  const footHint = $('#footHint');
+  const SENSOR_RANGE = 35;   // 倾斜多少度达到满偏
+  const SENSOR_DEAD = 1.5;   // 死区：滤掉手持微抖
+  const axis = d =>
+    clamp((Math.abs(d) < SENSOR_DEAD ? 0 : d - Math.sign(d) * SENSOR_DEAD) / SENSOR_RANGE, -1, 1);
+  let sensorOn = false;         // 收到首个有效读数后置位
+  let rawB = null, rawG = null; // 最近一次原始读数（beta/gamma）
+  let baseB = 0, baseG = 0;     // 基准姿势，激活时校准、随屏幕旋转重新校准
+
+  function onOrient(e) {
+    if (e.beta == null || e.gamma == null) return;   // 桌面浏览器可能发全空事件
+    rawB = e.beta; rawG = e.gamma;
+    if (!sensorOn) {
+      sensorOn = true;
+      baseB = rawB; baseG = rawG;   // 以当前持机姿势为零点
+      if (footHint) footHint.innerHTML = '<b>倾斜手机</b> 光影随动 &nbsp;·&nbsp; <b>轻点</b> 翻面';
+      if (sensorBtn) sensorBtn.hidden = true;
+    }
+    // 按屏幕旋转角换算倾斜轴（角度 = 内容补偿角）
+    const ang = (screen.orientation && typeof screen.orientation.angle === 'number')
+      ? screen.orientation.angle : (window.orientation || 0);
+    const dB = rawB - baseB, dG = rawG - baseG;
+    let dx = dG, dy = dB;                                 // 竖屏：gamma 左右 / beta 前后
+    if (ang === 90)                      { dx = -dB; dy = dG; }
+    else if (ang === 270 || ang === -90) { dx = dB;  dy = -dG; }
+    else if (ang === 180)                { dx = -dG; dy = -dB; }
+    pxT = axis(dx);
+    pyT = axis(dy);
+  }
+
+  if (window.DeviceOrientationEvent && !reduced) {
+    const DOP = window.DeviceOrientationEvent;
+    if (typeof DOP.requestPermission === 'function') {
+      // iOS 13+：授权必须由用户手势触发，页脚放一个开关
+      sensorBtn.hidden = false;
+      sensorBtn.addEventListener('click', () => {
+        DOP.requestPermission().then(state => {
+          if (state === 'granted') {
+            addEventListener('deviceorientation', onOrient);
+            sensorBtn.hidden = true;
+          } else {
+            sensorBtn.textContent = '体感未授权';
+            setTimeout(() => { sensorBtn.hidden = true; sensorBtn.textContent = '开启体感'; }, 2600);
+          }
+        }).catch(() => { sensorBtn.hidden = true; });  // 非安全上下文（如 http）拿不到授权，静默回退
+      });
+    } else {
+      // Android 等免授权平台：直接监听，收到有效读数即激活
+      addEventListener('deviceorientation', onOrient);
+    }
+    addEventListener('orientationchange', () => {
+      if (sensorOn && rawB != null) { baseB = rawB; baseG = rawG; }
+    });
   }
 
   /* ------------------------------------------------ 粒子（余烬 + 翻面礼花） */
@@ -168,6 +233,19 @@
     px += (pxT - px) * 0.14;
     py += (pyT - py) * 0.14;
 
+    // 体感基准回中：按真实时间衰减（约 1.1 秒时间常数），动则有反应，停稳即归位
+    const dt = Math.min(64, t - (lastT || t));
+    lastT = t;
+    if (sensorOn && rawB != null) {
+      const k = 1 - Math.exp(-dt * 0.0009);
+      baseB += (rawB - baseB) * k;
+      baseG += (rawG - baseG) * k;
+    }
+
+    // 点亮程度：悬停恒亮；体感看倾角幅度，静止回落
+    const actT = hovering ? 1 : Math.min(1, Math.hypot(pxT, pyT) * 1.6);
+    act += (actT - act) * 0.12;
+
     // 翻面后倾角方向取反，保证视觉上仍朝指针下压
     const sign = flipped ? -1 : 1;
     const flip = flipped ? 180 : 0;
@@ -180,9 +258,9 @@
     ry.v = (ry.v + (tyT - ry.y) * 0.155) * 0.74;
     ry.y += ry.v;
 
-    // 悬浮抬起 / 按压
-    const scaleT = pressed ? 0.962 : hovering ? 1.055 : 1;
-    const tzT = (hovering || pressed) ? 30 : 0;
+    // 悬浮抬起 / 按压（体感模式下随点亮程度起落）
+    const scaleT = pressed ? 0.962 : 1 + act * 0.055;
+    const tzT = pressed ? 30 : act * 30;
     scale += (scaleT - scale) * 0.12;
     tz += (tzT - tz) * 0.1;
 
@@ -191,7 +269,7 @@
 
     // 光效变量
     const mag = Math.min(1, Math.hypot(px, py));
-    const boost = hovering ? 1 : 0.3;
+    const boost = 0.3 + act * 0.7;
     tilt.style.setProperty('--gx', (50 - px * 36).toFixed(2) + '%');
     tilt.style.setProperty('--gy', (50 - py * 36).toFixed(2) + '%');
     tilt.style.setProperty('--holo-x', (50 + px * 44 + Math.sin(t * 0.00021) * 7).toFixed(2) + '%');
@@ -205,7 +283,7 @@
 
     // 卡影：随倾斜平移、悬浮放大变淡
     shadow.style.transform =
-      `translateX(${(-px * 16).toFixed(2)}px) scale(${(hovering ? 1.14 : 1) - Math.abs(px) * 0.05})`;
+      `translateX(${(-px * 16).toFixed(2)}px) scale(${(1 + act * 0.14) - Math.abs(px) * 0.05})`;
     shadow.style.opacity = (0.8 - tz * 0.006).toFixed(3);
 
     // 国徽金属渐变随指针流转
@@ -213,6 +291,15 @@
       const ang = 14 + px * 34 + py * 18;
       goldGrad.setAttribute('gradientTransform', `rotate(${ang.toFixed(2)} 358.82 389.6)`);
     }
+    // 帘子褶皱带随指针轻摆（与其他金属一致的"受光"反应）
+    const ribbonGrad = document.getElementById('ribbonGold');
+    if (ribbonGrad) {
+      ribbonGrad.setAttribute('gradientTransform', `rotate(${(px * 9).toFixed(2)} 358 660)`);
+    }
+    // 国徽镜面反射带：反光点与倾斜反向移动，像真实镀层
+    tilt.style.setProperty('--sheen-x', (50 - px * 52).toFixed(2) + '%');
+    tilt.style.setProperty('--sheen-y', (50 - py * 42).toFixed(2) + '%');
+    tilt.style.setProperty('--sheen-o', (0.22 + mag * 0.6 * boost).toFixed(3));
 
     drawFX();
     requestAnimationFrame(frame);

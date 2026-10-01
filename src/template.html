@@ -85,6 +85,7 @@
             <div class="emblem-halo" aria-hidden="true"></div>
             <div class="emblem-wrap">
               <!--INLINE:EMBLEM-->
+              <div class="emblem-sheen" aria-hidden="true"></div>
               <div class="emblem-sparks" aria-hidden="true">
                 <i style="left:50%;  top:16%; width:calc(var(--cw)*.055); --d:0s"></i>
                 <i style="left:21%;  top:44%; width:calc(var(--cw)*.04);  --d:-1.3s"></i>
@@ -114,7 +115,8 @@
 </main>
 
 <footer class="page-foot">
-  <p><b>移动鼠标</b> 倾斜卡牌 &nbsp;·&nbsp; <b>轻点</b> 翻面</p>
+  <p id="footHint"><b>移动鼠标</b> 倾斜卡牌 &nbsp;·&nbsp; <b>轻点</b> 翻面</p>
+  <button type="button" id="sensorBtn" class="sensor-btn" hidden>开启体感</button>
   <nav class="page-foot__links" aria-label="相关链接">
     <a class="foot-icon" href="https://x.com/cholf5" target="_blank" rel="noopener"
        aria-label="作者的 X 账号（x.com/cholf5）" title="X · @cholf5">
