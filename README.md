@@ -26,6 +26,7 @@
 - **👆 点击翻面**：翻面带甩动冲量，并迸发金色礼花
 - **🌈 全息光效**：彩虹镭射箔（color-dodge）、闪光噪点、镜面高光、掠过旗帜的高光带、国徽金属流光与星芒 glint，全部跟随指针
 - **🔥 背景氛围**：缓缓上升的金色余烬
+- **📱 PWA**：可安装到主屏幕（独立窗口、红金星组图标、maskable 适配），Service Worker 预缓存全部资源，断网也能翻卡
 - **♿ 无障碍**：支持 `prefers-reduced-motion`（静态呈现），键盘翻面（Tab + Enter/空格），并保留 `aria` 标注
 
 ## 🚀 部署到 GitHub Pages
@@ -56,20 +57,30 @@ python3 -m http.server 8765
 python3 build.py
 ```
 
-`build.py` 做三件事：
+`build.py` 做四件事：
 
 1. `assets/flag.svg` —— 按官方制图参数（30×20 网格、大星半径 3、圆心 (5,5)，四颗小星半径 1、圆心 (10,2)(12,4)(12,7)(10,9) 且星尖各指向大星圆心）生成国旗；
 2. `assets/emblem-gold.svg` —— 读取 `vendor/emblem-original.svg`（来源：Wikimedia Commons *National Emblem of the People's Republic of China.svg*），把金色部件重着色为 `goldMetal` 金属渐变、红色部件重着色为 `bronzeDeep` 古铜金，黑描边改为雕刻深褐，并套一层 `feDiffuseLighting` + `feSpecularLighting` 浮雕滤镜（光源固定左上，可调 azimuth/elevation）；
-3. 把两份矢量内联进 `src/template.html`，连同 `src/style.css`、`src/main.js` 输出到项目根目录。
+3. PWA —— 用纯标准库把与国旗同源的星组几何光栅化成 `assets/icon-*.png` / `apple-touch-icon.png`（红底金星、超采样抗锯齿），写出根目录 `manifest.webmanifest`，并复制 `src/sw.js` 到根目录（Service Worker 必须放在根路径才能拿到全站 scope）；
+4. 把两份矢量内联进 `src/template.html`，连同 `src/style.css`、`src/main.js` 输出到项目根目录。
+
+## 📱 PWA 说明
+
+- 清单与 Service Worker 的所有路径都是**相对路径**，兼容 GitHub Pages 项目页的 `/仓库名/` 子路径部署；
+- 图标为"any"与"maskable"双份：普通图标星组稍大，maskable 版星组缩小至启动器圆形/圆角裁切安全区内；
+- 缓存策略：静态资源缓存优先、页面导航网络优先（发版即时生效），离线时回退缓存入口页；改资源清单后记得把 `src/sw.js` 顶部的 `CACHE` 版本号 +1；
+- iOS Safari 从菜单"添加到主屏幕"即可全屏独立运行；Android Chrome / Edge 会自动弹出安装提示。
 
 ## 📁 文件
 
 ```
-build.py              构建脚本（国旗生成 / 国徽金属化 / 内联组装）
+build.py              构建脚本（国旗生成 / 国徽金属化 / PWA 图标与清单 / 内联组装）
 src/template.html     页面结构（含 SVG 内联占位符）
 src/style.css         卡体 3D、全息层、浮雕、版式
-src/main.js           弹簧物理、指针光效、粒子礼花
-assets/               生成的独立 SVG
+src/main.js           弹簧物理、指针光效、粒子礼花、SW 注册
+src/sw.js             Service Worker（离线缓存，构建时复制到根目录）
+manifest.webmanifest  PWA 清单（构建时生成）
+assets/               生成的独立 SVG 与 PWA 图标 PNG
 docs/demo.gif         网站演示动图
 vendor/               国徽原始素材
 LICENSE               MIT 许可证

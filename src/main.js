@@ -146,6 +146,17 @@
     });
   }
 
+  /* ------------------------------------------------ PWA：离线缓存 */
+  // 仅在 http(s) 环境注册（双击 file:// 打开时静默跳过），且等到 load 之后，
+  // 避免与首屏渲染、动效初始化抢资源。
+  if ('serviceWorker' in navigator &&
+      (location.protocol === 'https:' ||
+       location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
   /* ------------------------------------------------ 粒子（余烬 + 翻面礼花） */
   const cv = $('#fx');
   const ctx = cv.getContext('2d');

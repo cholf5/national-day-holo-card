@@ -27,6 +27,12 @@ body {
   color: var(--ink);
   background:
     radial-gradient(130% 95% at 50% 28%, #5c1310 0%, #3a0808 40%, #200304 68%, #0d0102 100%);
+  /* PWA standalone / 刘海屏：内容避入安全区，不被状态栏与手势条遮挡 */
+  padding:
+    max(0px, env(safe-area-inset-top))
+    max(0px, env(safe-area-inset-right))
+    max(0px, env(safe-area-inset-bottom))
+    max(0px, env(safe-area-inset-left));
 }
 
 #fx {

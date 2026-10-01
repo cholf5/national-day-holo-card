@@ -3,7 +3,8 @@
 
 1. 按国家标准 (GB 12982) 的制图参数精确生成国旗 SVG -> assets/flag.svg
 2. 将国徽 SVG 重着色为金属金浮雕 -> assets/emblem-gold.svg
-3. 将两份矢量图内联进 src/template.html -> index.html
+3. 生成 PWA 图标（纯标准库光栅化）-> assets/*.png 与 manifest.webmanifest
+4. 将两份矢量图内联进 src/template.html -> index.html，并输出 style.css / main.js / sw.js
 """
 import math
 import os
@@ -13,14 +14,18 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 # ---------------------------------------------------------------- 国旗
-def star_path(cx: float, cy: float, r: float, phi: float) -> str:
-    """五角星路径。phi 为星尖指向角（SVG 坐标系，y 向下）。"""
+def star_vertices(cx: float, cy: float, r: float, phi: float) -> list:
+    """五角星顶点。phi 为星尖指向角（SVG 坐标系，y 向下）。"""
     ri = r * math.sin(math.pi / 10) / math.sin(3 * math.pi / 10)
-    pts = []
-    for i in range(10):
-        rad = r if i % 2 == 0 else ri
-        a = phi + i * math.pi / 5
-        pts.append(f"{cx + rad * math.cos(a):.2f},{cy + rad * math.sin(a):.2f}")
+    return [
+        (cx + (r if i % 2 == 0 else ri) * math.cos(phi + i * math.pi / 5),
+         cy + (r if i % 2 == 0 else ri) * math.sin(phi + i * math.pi / 5))
+        for i in range(10)
+    ]
+
+
+def star_path(cx: float, cy: float, r: float, phi: float) -> str:
+    pts = [f"{x:.2f},{y:.2f}" for x, y in star_vertices(cx, cy, r, phi)]
     return "M" + " L".join(pts) + " Z"
 
 
@@ -132,6 +137,120 @@ def build_emblem() -> str:
     return root + GRADIENT_DEFS + '<g filter="url(#relief)">' + inner + "</g></svg>"
 
 
+# ---------------------------------------------------------------- PWA 图标与清单
+ICON_RED = (0xDE, 0x29, 0x10)    # 旗面红
+ICON_GOLD = (0xFF, 0xDE, 0x00)   # 五星黄
+
+
+def icon_stars() -> list:
+    """星组多边形（官方 30x20 网格坐标，与 build_flag 同源）：
+    大星 r=3 圆心 (5,5)，四颗小星 r=1，星尖各指向大星圆心。"""
+    polys = [star_vertices(5, 5, 3, -math.pi / 2)]
+    for cx, cy in [(10, 2), (12, 4), (12, 7), (10, 9)]:
+        polys.append(star_vertices(cx, cy, 1, math.atan2(5 - cy, 5 - cx)))
+    return polys
+
+
+def write_png(path: str, size: int, rgb: bytes) -> None:
+    """最小 PNG 编码器（8bit RGB、0 号过滤行），纯标准库、零依赖。"""
+    import struct
+    import zlib
+    raw = b"".join(b"\x00" + rgb[y * size * 3:(y + 1) * size * 3] for y in range(size))
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9))
+           + chunk(b"IEND", b""))
+    with open(path, "wb") as f:
+        f.write(png)
+
+
+def build_icon(path: str, size: int, span: float, ss: int = 3) -> None:
+    """纯标准库光栅化五角星图标：旗面红底，金黄星组居中、占画布 span 宽。
+    ss 倍超采样 + 盒滤波抗锯齿；maskable 图标用更小的 span 躲启动器裁切安全区。"""
+    w = h = size * ss
+    polys = icon_stars()
+    xs = [x for poly in polys for x, _ in poly]
+    ys = [y for poly in polys for _, y in poly]
+    k = w * span / (max(xs) - min(xs))            # 网格单位 -> 超采样像素
+    ox = w / 2 - (min(xs) + max(xs)) / 2 * k
+    oy = h / 2 - (min(ys) + max(ys)) / 2 * k
+
+    # 逐星扫描线填充（奇偶规则）到掩码
+    mask = bytearray(w * h)
+    for poly in polys:
+        vx = [ox + x * k for x, _ in poly]
+        vy = [oy + y * k for _, y in poly]
+        n = len(poly)
+        for row in range(h):
+            yc = row + 0.5
+            cross = sorted(
+                vx[i] + (yc - vy[i]) * (vx[(i + 1) % n] - vx[i])
+                / (vy[(i + 1) % n] - vy[i])
+                for i in range(n)
+                if (vy[i] <= yc < vy[(i + 1) % n]) or (vy[(i + 1) % n] <= yc < vy[i])
+            )
+            if not cross:
+                continue
+            base = row * w
+            for a, b in zip(cross[::2], cross[1::2]):
+                lo = max(0, math.ceil(a - 0.5))
+                hi = min(w - 1, math.floor(b - 0.5))
+                if hi >= lo:
+                    mask[base + lo:base + hi + 1] = b"\xff" * (hi - lo + 1)
+
+    # 盒滤波降采样出覆盖率，红金两色按覆盖度插值
+    lut = [
+        bytes(int(ICON_RED[c] + (ICON_GOLD[c] - ICON_RED[c]) * a / 255 + 0.5)
+              for c in range(3))
+        for a in range(256)
+    ]
+    rgb = bytearray(size * size * 3)
+    for oy2 in range(size):
+        for ox2 in range(size):
+            cov = 0
+            for sy in range(oy2 * ss, (oy2 + 1) * ss):
+                base = sy * w + ox2 * ss
+                cov += sum(mask[base:base + ss])
+            i = (oy2 * size + ox2) * 3
+            rgb[i:i + 3] = lut[(cov + ss * ss // 2) // (ss * ss)]
+    write_png(path, size, bytes(rgb))
+
+
+def build_manifest() -> str:
+    """PWA 清单。start_url/scope/图标全部用相对路径，
+    兼容 GitHub Pages 项目页的子路径部署（/仓库名/）。"""
+    import json
+    return json.dumps(
+        {
+            "name": "国庆典藏卡",
+            "short_name": "国庆典藏卡",
+            "description": "五星红旗 × 金属国徽 3D 全息典藏卡：弹簧倾斜、点击翻面、全息光效。",
+            "lang": "zh-CN",
+            "start_url": "./",
+            "scope": "./",
+            "display": "standalone",
+            "background_color": "#200304",
+            "theme_color": "#3a0808",
+            "icons": [
+                {"src": "assets/icon-192.png", "sizes": "192x192",
+                 "type": "image/png", "purpose": "any"},
+                {"src": "assets/icon-512.png", "sizes": "512x512",
+                 "type": "image/png", "purpose": "any"},
+                {"src": "assets/icon-maskable-192.png", "sizes": "192x192",
+                 "type": "image/png", "purpose": "maskable"},
+                {"src": "assets/icon-maskable-512.png", "sizes": "512x512",
+                 "type": "image/png", "purpose": "maskable"},
+            ],
+        },
+        ensure_ascii=False, indent=2,
+    ) + "\n"
+
+
 # ---------------------------------------------------------------- 组装
 def build_html(flag: str, emblem: str) -> str:
     import time
@@ -156,11 +275,26 @@ def main() -> None:
         f.write(emblem)
     shutil.copy(os.path.join(ROOT, "src", "style.css"), os.path.join(ROOT, "style.css"))
     shutil.copy(os.path.join(ROOT, "src", "main.js"), os.path.join(ROOT, "main.js"))
+    shutil.copy(os.path.join(ROOT, "src", "sw.js"), os.path.join(ROOT, "sw.js"))
     with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8") as f:
         f.write(build_html(flag, emblem))
+
+    # PWA：五张方形图标（span 为星组占画布宽度比例；maskable 留足裁切安全区）
+    for name, size, span in [
+        ("icon-192.png", 192, 0.62),
+        ("icon-512.png", 512, 0.62),
+        ("icon-maskable-192.png", 192, 0.55),
+        ("icon-maskable-512.png", 512, 0.55),
+        ("apple-touch-icon.png", 180, 0.62),
+    ]:
+        build_icon(os.path.join(ROOT, "assets", name), size, span)
+    with open(os.path.join(ROOT, "manifest.webmanifest"), "w", encoding="utf-8") as f:
+        f.write(build_manifest())
+
     print(f"flag.svg    {len(flag):>8,} bytes")
     print(f"emblem-gold {len(emblem):>8,} bytes")
-    print("index.html / style.css / main.js  generated")
+    print("index.html / style.css / main.js / sw.js  generated")
+    print("assets icons (192/512/maskable/apple-touch) + manifest.webmanifest  generated")
 
 
 if __name__ == "__main__":
