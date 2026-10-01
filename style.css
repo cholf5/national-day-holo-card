@@ -3,7 +3,8 @@
    3D 结构链: .stage(perspective) > .float > .card3d > .tilt > .card > faces
    ================================================================== */
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* 去掉移动端点按高亮：默认的半透明蓝遮罩会在深红卡面上一闪而过 */
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 :root {
   /* 卡片宽度基准，所有卡内尺寸按它的百分比计算 */
@@ -187,6 +188,7 @@ body {
   aspect-ratio: 5 / 7;
   cursor: pointer;
   outline: none;
+  touch-action: manipulation;   /* 移动端连点翻面时不触发双击缩放 */
   transform-style: preserve-3d;
   will-change: transform;
 }
