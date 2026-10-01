@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>国庆典藏卡 · 1949 — 2026</title>
+<meta name="description" content="庆祝中华人民共和国成立七十七周年 —— 全息炫光典藏卡">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="bg-vignette" aria-hidden="true"></div>
+
+<header class="page-head">
+  <p class="page-head__years" id="yearsLine">一九四九 · 二〇二六</p>
+  <h1 class="page-head__title" id="titleLine">庆祝中华人民共和国成立七十七周年</h1>
+</header>
+
+<main class="stage" id="stage">
+  <div class="card-glow" aria-hidden="true"></div>
+  <div class="float">
+    <div class="card-shadow" id="cardShadow" aria-hidden="true"></div>
+
+    <div class="card3d" id="card3d" tabindex="0" role="button"
+         aria-pressed="false" aria-label="国庆典藏卡，点击翻面">
+      <div class="tilt" id="tilt">
+        <div class="card">
+
+          <div class="edges" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+
+          <!-- ==================== 正面 · 五星红旗 ==================== -->
+          <section class="face face--front" aria-label="卡牌正面：五星红旗">
+            <div class="face__bg"></div>
+            <div class="face__silk"></div>
+            <div class="face__pattern"></div>
+
+            <div class="frame">
+              <i class="c c1"></i><i class="c c2"></i><i class="c c3"></i><i class="c c4"></i>
+            </div>
+
+            <header class="face__top">
+              <span class="dia">◆</span>
+              <span class="face__top-cn">中华人民共和国</span>
+              <span class="dia">◆</span>
+            </header>
+
+            <figure class="flag-window">
+              <div class="flag-window__inner">
+                <!--INLINE:FLAG-->
+                <div class="flag-shine"></div>
+              </div>
+            </figure>
+
+            <footer class="nameplate">
+              <div class="rule"></div>
+              <h2 class="nameplate__cn">五星红旗</h2>
+              <p class="nameplate__en">FIVE-STAR RED FLAG · <span id="frontYears">1949 — 2026</span></p>
+              <div class="rule rule--short"></div>
+            </footer>
+
+            <div class="layer holo"></div>
+            <div class="layer glitter"></div>
+            <div class="layer glare"></div>
+          </section>
+
+          <!-- ==================== 背面 · 国徽 ==================== -->
+          <section class="face face--back" aria-label="卡牌背面：国徽">
+            <div class="face__bg face__bg--back"></div>
+            <div class="face__rays"></div>
+
+            <div class="frame">
+              <i class="c c1"></i><i class="c c2"></i><i class="c c3"></i><i class="c c4"></i>
+            </div>
+
+            <header class="face__top">
+              <span class="dia">◆</span>
+              <span class="face__top-cn">中华人民共和国</span>
+              <span class="dia">◆</span>
+            </header>
+
+            <div class="emblem-rings" aria-hidden="true"></div>
+            <div class="emblem-halo" aria-hidden="true"></div>
+            <div class="emblem-wrap">
+              <!--INLINE:EMBLEM-->
+              <div class="emblem-sparks" aria-hidden="true">
+                <i style="left:50%;  top:16%; width:calc(var(--cw)*.055); --d:0s"></i>
+                <i style="left:21%;  top:44%; width:calc(var(--cw)*.04);  --d:-1.3s"></i>
+                <i style="left:79%;  top:40%; width:calc(var(--cw)*.046); --d:-2.2s"></i>
+                <i style="left:50%;  top:76%; width:calc(var(--cw)*.05);  --d:-3s"></i>
+                <i style="left:33%;  top:26%; width:calc(var(--cw)*.03);  --d:-1.9s"></i>
+                <i style="left:68%;  top:60%; width:calc(var(--cw)*.032); --d:-.6s"></i>
+              </div>
+            </div>
+
+            <footer class="nameplate">
+              <div class="rule"></div>
+              <h2 class="nameplate__cn">国徽</h2>
+              <p class="nameplate__en nameplate__en--long">NATIONAL EMBLEM OF THE PEOPLE'S REPUBLIC OF CHINA</p>
+              <div class="rule rule--short"></div>
+            </footer>
+
+            <div class="layer holo"></div>
+            <div class="layer glitter"></div>
+            <div class="layer glare"></div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="page-foot">
+  <p><b>移动鼠标</b> 倾斜卡牌 &nbsp;·&nbsp; <b>轻点</b> 翻面</p>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>
