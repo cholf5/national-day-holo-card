@@ -76,6 +76,11 @@ body {
 .page-foot {
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 14px;
   text-align: center;
   padding-bottom: clamp(12px, 3vh, 26px);
   font-size: clamp(11px, 1.6vh, 14px);
@@ -87,6 +92,42 @@ body {
 .page-foot b {
   color: rgba(248, 220, 150, 0.95);
   font-weight: 700;
+}
+
+/* 页脚社交图标：与提示同行靠右，静置暗金，悬停提亮为鎏金 */
+.page-foot__links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.foot-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: rgba(238, 200, 120, 0.62);
+  transition: color 0.25s ease, filter 0.25s ease, transform 0.25s ease;
+}
+
+.foot-icon svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.foot-icon:hover,
+.foot-icon:focus-visible {
+  color: rgba(248, 220, 150, 0.95);
+  filter: drop-shadow(0 0 6px rgba(255, 208, 100, 0.55));
+  transform: translateY(-1px);
+}
+
+.foot-icon:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 226, 150, 0.8);
 }
 
 @keyframes rise {
@@ -541,4 +582,6 @@ body {
   .float { animation: none; }
   .flag-shine { animation: none; transform: none; opacity: 0; }
   .page-head, .page-foot { animation: none; }
+  .foot-icon { transition: none; }
+  .foot-icon:hover { transform: none; }
 }
