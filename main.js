@@ -131,13 +131,18 @@
     const DOP = window.DeviceOrientationEvent;
     const start = () => addEventListener('deviceorientation', onOrient);
     if (typeof DOP.requestPermission === 'function') {
-      // iOS 13+：授权必须由用户手势触发——首次轻点页面时静默申请
+      // iOS 13+：授权必须由用户手势触发。但触屏的 pointerdown 不算激活事件
+      // （规范规定 pointerdown 仅鼠标指针算数，WebKit 也在触摸结束时才注入
+      // 手势），挂在 pointerdown 上申请会被静默判为拒绝。改挂 touchend，
+      // click 兜底覆盖触控板/鼠标；拒绝则不再打扰
       let asked = false;
-      addEventListener('pointerdown', () => {
+      const ask = () => {
         if (asked) return;
         asked = true;
         DOP.requestPermission().then(s => { if (s === 'granted') start(); }).catch(() => {});
-      });
+      };
+      addEventListener('touchend', ask, { passive: true });
+      addEventListener('click', ask);
     } else {
       start();
     }

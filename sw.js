@@ -1,6 +1,6 @@
 /* 国庆典藏卡 —— Service Worker（离线缓存）
    发新版时把 CACHE 的版本号 +1，旧缓存会在 activate 阶段整体清除。 */
-const CACHE = 'guoqing-card-v1';
+const CACHE = 'guoqing-card-v2';
 // GitHub Pages 项目页部署在 /仓库名/ 子路径下，这里与页面一样全部用相对路径
 const PRECACHE = [
   './',
