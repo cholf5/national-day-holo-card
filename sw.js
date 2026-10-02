@@ -1,6 +1,6 @@
 /* 国庆典藏卡 —— Service Worker（离线缓存）
    发新版时把 CACHE 的版本号 +1，旧缓存会在 activate 阶段整体清除。 */
-const CACHE = 'guoqing-card-v2';
+const CACHE = 'guoqing-card-v4';
 // GitHub Pages 项目页部署在 /仓库名/ 子路径下，这里与页面一样全部用相对路径
 const PRECACHE = [
   './',
@@ -47,18 +47,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 静态资源：缓存优先，未命中走网络并回填缓存
-  //（ignoreSearch 兼容 build.py 给 style.css / main.js 追加的 ?v= 时间戳）
+  // 静态资源：网络优先，离线才回退缓存。此前是缓存优先 + ignoreSearch 匹配，
+  // 导致 main.js?v=新时间戳 也会命中旧缓存——发版后普通刷新拿不到新代码，
+  // 只能靠 CACHE 版本号轮转。改为网络优先后，在线时任何一次刷新都是最新版，
+  // 离线回退仍按忽略参数匹配预缓存副本
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(hit =>
-      hit ||
-      fetch(req).then(res => {
+    fetch(req)
+      .then(res => {
         if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then(cache => cache.put(req, copy));
         }
         return res;
       })
-    )
+      .catch(() => caches.match(req, { ignoreSearch: true }))
   );
 });

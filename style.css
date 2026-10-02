@@ -209,7 +209,7 @@ body {
   transform-style: preserve-3d;
 }
 
-.tilt { will-change: transform; }
+.tilt, .card { will-change: transform; }
 
 /* 卡片厚度（侧边，夹在正反两片外壳之间） */
 .edges { position: absolute; inset: 0; transform-style: preserve-3d; }

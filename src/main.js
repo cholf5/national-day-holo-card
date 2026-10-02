@@ -6,8 +6,10 @@
   const stage = $('#stage');
   const card3d = $('#card3d');
   const tilt = $('#tilt');
+  const flipEl = $('.card', card3d);   // 180° 翻面独立在这一层，交给合成器动画
   const shadow = $('#cardShadow');
   const goldGrad = document.getElementById('goldMetal');
+  const ribbonGrad = document.getElementById('ribbonGold');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -56,11 +58,23 @@
 
   /* ------------------------------------------------ 指针与弹簧状态 */
   const MAX_TILT = 12;          // 最大倾角（度）
+
+  /* ---- 手感调参区：翻面与倾斜弹簧按真实时间积分，任何刷新率下手感一致 ----
+     STIFFNESS 刚度（1/s²）：越大翻得越快、到得越硬
+     DAMPING   阻尼（1/s）：越小，落定前晃得越久（回弹次数越多）
+     FLIP_KICK 翻面冲量（度/秒）：起手那一脚的甩劲
+     （翻面动画按这三个参数离线采样关键帧，见 doFlip） */
+  const SPRING_STIFFNESS = 558;    // 旧逐帧 0.155 的等效（0.155×60²）
+  const SPRING_DAMPING  = 18.0663; // 旧逐帧 0.74 的等效（-60·ln 0.74）
+  const FLIP_KICK       = 540;     // 旧逐帧 9°/帧 的等效（9×60）
+  console.log(`翻面 r3（合成器动画） · 刚度${SPRING_STIFFNESS} 阻尼${SPRING_DAMPING} 冲量${FLIP_KICK}（改完 build.py 后刷新这里应跟着变）`);
   let pxT = 0, pyT = 0;         // 指针目标位置 (-1..1)
   let px = 0, py = 0;           // 平滑后的指针
   let hovering = false, pressed = false, flipped = false;
   let act = 0;                  // 点亮程度 0..1：悬停恒亮，体感随倾角起伏、静止回落
-  let lastT = 0;                // 上一帧时间戳（体感回中用真实时间，避免受刷新率影响）
+  let lastT = 0;                // 上一帧时间戳（弹簧/平滑按真实时间积分，不受刷新率影响）
+  let texDirty = true;          // 贴图位置变量待补写（首帧先写一次，避免吃 CSS 默认值）
+  let flipping = false;         // 翻面冻结闸门（doFlip 置位，翻面动画结束解除）
   const rx = { x: 6, v: 0 };    // rotateX 弹簧
   const ry = { y: -38, v: 0 };  // rotateY 弹簧（初始偏转，入场回弹）
   let scale = 0.94, tz = -46;   // 入场时略小略远
@@ -85,9 +99,49 @@
     });
   }
 
+  /* ------------------------------------------------ 翻面（合成器动画） */
+  // 180° 翻面不走 rAF 弹簧：主线程一有抖动，高刷屏就把旋转渲染成大跳帧，
+  // 且背面可见的半程渲染更重，两个翻面方向节奏不对称。改为把弹簧轨迹
+  // 离线采样成关键帧交给 Web Animations 合成器播放——时间线与主线程
+  // 负载解耦，起手甩劲 + 回弹晃动的手感逐帧保留
+  let flipAnim = null;
+  let flipFrames = [];   // 当前动画的角度采样（中途反向翻面时反解当前角用）
+
   function doFlip() {
     flipped = !flipped;
-    ry.v += flipped ? 9 : -9;   // 翻面附加冲量，弹簧会带出甩动感
+    const to = flipped ? 180 : 0;
+
+    // 中途反向：按当前动画进度反解实际角度，作为新轨迹的起点
+    let from = flipped ? 0 : 180;
+    if (flipAnim && flipAnim.playState === 'running') {
+      const p = flipAnim.effect.getComputedTiming().progress ?? 1;
+      const f = Math.min(1, Math.max(0, p)) * (flipFrames.length - 1);
+      const i = f | 0;
+      const i1 = Math.min(i + 1, flipFrames.length - 1);
+      from = flipFrames[i] + (flipFrames[i1] - flipFrames[i]) * (f - i);
+    }
+    flipAnim?.cancel();
+
+    // 与倾斜弹簧同参数，按 240Hz 采样（任意高刷屏都平滑），冲量朝翻面方向
+    const dt = 1 / 240;
+    let y = from, v = (Math.sign(to - from) || 1) * FLIP_KICK;
+    flipFrames = [y];
+    for (let i = 0; i < 400; i++) {          // 采样上限 ~1.7s，兜底
+      v += (to - y) * SPRING_STIFFNESS * dt;
+      v *= Math.exp(-SPRING_DAMPING * dt);
+      y += v * dt;
+      flipFrames.push(y);
+      if (Math.abs(to - y) < 0.4 && Math.abs(v) < 4) break;
+    }
+    flipFrames[flipFrames.length - 1] = to;  // 末帧精确落在目标角
+
+    flipAnim = flipEl.animate(
+      flipFrames.map(a => ({ transform: `rotateY(${a.toFixed(3)}deg)` })),
+      { duration: ((flipFrames.length - 1) / 240) * 1000, easing: 'linear', fill: 'forwards' }
+    );
+    flipAnim.onfinish = () => { flipping = false; };
+    flipping = true;
+
     burstAtCard();
     card3d.setAttribute('aria-pressed', String(flipped));
   }
@@ -240,14 +294,19 @@
 
   /* ------------------------------------------------ 主循环 */
   function frame(t) {
-    // 指针平滑
-    px += (pxT - px) * 0.14;
-    py += (pyT - py) * 0.14;
+    // 真实时间步长：弹簧与各平滑项按 dt 积分，任何刷新率下手感一致
+    // （60Hz 下与旧逐帧系数逐位等效；高刷屏不再 2.4 倍速、回弹不再被压没）
+    const dt = Math.min(64, t - (lastT || t));
+    lastT = t;
+    const dts = dt / 1000;
+    const damp = Math.exp(-SPRING_DAMPING * dts);
+
+    // 指针平滑（1-exp(-λdt)；λ=9.05 为旧逐帧系数 0.14 的 60Hz 等效）
+    px += (pxT - px) * (1 - Math.exp(-9.05 * dts));
+    py += (pyT - py) * (1 - Math.exp(-9.05 * dts));
 
     // 体感基准回中：贴近零位时快速归零；明显倾斜时基本保持姿
     // 势（仅每 15 秒缓慢校正，消除持机姿势漂移），按真实时间衰减与刷新率无关
-    const dt = Math.min(64, t - (lastT || t));
-    lastT = t;
     if (sensorOn && rawB != null) {
       const near = Math.abs(rawB - baseB) < 2.5 && Math.abs(rawG - baseG) < 2.5;
       const k = 1 - Math.exp(-dt / (near ? 600 : 15000));
@@ -257,25 +316,26 @@
 
     // 点亮程度：悬停恒亮；体感看倾角幅度，静止回落
     const actT = hovering ? 1 : Math.min(1, Math.hypot(pxT, pyT) * 1.6);
-    act += (actT - act) * 0.12;
+    act += (actT - act) * (1 - Math.exp(-7.67 * dts));   // 旧逐帧 0.12 的 60Hz 等效
 
-    // 翻面后倾角方向取反，保证视觉上仍朝指针下压
-    const sign = flipped ? -1 : 1;
-    const flip = flipped ? 180 : 0;
-    const txT = -pyT * MAX_TILT * sign;
-    const tyT = pxT * MAX_TILT * sign + flip;
+    // 倾斜目标只含指针分量（正反面同向，rotateY(180) 的镜像自动保证
+    // 视觉上仍朝指针下压）；180° 翻面由 .card 的合成器动画独立承担
+    const txT = -pyT * MAX_TILT;
+    const tyT = pxT * MAX_TILT;
 
-    // 弹簧（欠阻尼，带一点小丑牌式的回弹晃动）
-    rx.v = (rx.v + (txT - rx.x) * 0.155) * 0.74;
-    rx.x += rx.v;
-    ry.v = (ry.v + (tyT - ry.y) * 0.155) * 0.74;
-    ry.y += ry.v;
+    // 弹簧（欠阻尼，带一点小丑牌式的回弹晃动）；参数见顶部"手感调参区"
+    rx.v += (txT - rx.x) * SPRING_STIFFNESS * dts;
+    rx.v *= damp;
+    rx.x += rx.v * dts;
+    ry.v += (tyT - ry.y) * SPRING_STIFFNESS * dts;
+    ry.v *= damp;
+    ry.y += ry.v * dts;
 
     // 悬浮抬起 / 按压（体感模式下随点亮程度起落）
     const scaleT = pressed ? 0.962 : 1 + act * 0.055;
     const tzT = pressed ? 30 : act * 30;
-    scale += (scaleT - scale) * 0.12;
-    tz += (tzT - tz) * 0.1;
+    scale += (scaleT - scale) * (1 - Math.exp(-7.67 * dts));   // 旧逐帧 0.12 的等效
+    tz += (tzT - tz) * (1 - Math.exp(-6.32 * dts));            // 旧逐帧 0.1 的等效
 
     tilt.style.transform = `rotateX(${rx.x.toFixed(3)}deg) rotateY(${ry.y.toFixed(3)}deg)`;
     card3d.style.transform = `translateZ(${tz.toFixed(2)}px) scale(${scale.toFixed(4)})`;
@@ -283,12 +343,31 @@
     // 光效变量
     const mag = Math.min(1, Math.hypot(px, py));
     const boost = 0.3 + act * 0.7;
-    tilt.style.setProperty('--gx', (50 - px * 36).toFixed(2) + '%');
-    tilt.style.setProperty('--gy', (50 - py * 36).toFixed(2) + '%');
-    tilt.style.setProperty('--holo-x', (50 + px * 44 + Math.sin(t * 0.00021) * 7).toFixed(2) + '%');
-    tilt.style.setProperty('--holo-y', (50 + py * 32 + mod(t * 0.0018, 120) - 60).toFixed(2) + '%');
-    tilt.style.setProperty('--glit-x', mod(px * 90 + t * 0.009, 320).toFixed(1) + 'px');
-    tilt.style.setProperty('--glit-y', mod(py * 70 - t * 0.006, 320).toFixed(1) + 'px');
+    // 翻面进行中冻结"内容位置"类变量与渐变（flipping 由 doFlip 置位、翻面
+    // 动画结束解除）：它们一变就触发重绘，而高刷屏帧预算只有 ~6.9ms，背面
+    // 国徽（含光照滤镜）会把帧率拖垮。冻结后旋转退化为纯合成器变换；透明度
+    // 类变量合成器可直接处理，照常更新
+    if (!flipping || texDirty) {
+      texDirty = false;
+      tilt.style.setProperty('--gx', (50 - px * 36).toFixed(2) + '%');
+      tilt.style.setProperty('--gy', (50 - py * 36).toFixed(2) + '%');
+      tilt.style.setProperty('--holo-x', (50 + px * 44 + Math.sin(t * 0.00021) * 7).toFixed(2) + '%');
+      tilt.style.setProperty('--holo-y', (50 + py * 32 + mod(t * 0.0018, 120) - 60).toFixed(2) + '%');
+      tilt.style.setProperty('--glit-x', mod(px * 90 + t * 0.009, 320).toFixed(1) + 'px');
+      tilt.style.setProperty('--glit-y', mod(py * 70 - t * 0.006, 320).toFixed(1) + 'px');
+      // 国徽金属渐变随指针流转
+      if (goldGrad) {
+        const ang = 14 + px * 34 + py * 18;
+        goldGrad.setAttribute('gradientTransform', `rotate(${ang.toFixed(2)} 358.82 389.6)`);
+      }
+      // 帘子褶皱带随指针轻摆（与其他金属一致的"受光"反应）
+      if (ribbonGrad) {
+        ribbonGrad.setAttribute('gradientTransform', `rotate(${(px * 9).toFixed(2)} 358 660)`);
+      }
+      // 国徽镜面反射带：反光点与倾斜反向移动，像真实镀层
+      tilt.style.setProperty('--sheen-x', (50 - px * 52).toFixed(2) + '%');
+      tilt.style.setProperty('--sheen-y', (50 - py * 42).toFixed(2) + '%');
+    }
     tilt.style.setProperty('--holo-o', clamp(0.07 + mag * 0.55 * boost + Math.sin(t * 0.0011) * 0.04, 0, 0.9).toFixed(3));
     tilt.style.setProperty('--glare-o', (0.06 + mag * 0.68 * boost).toFixed(3));
     // 移动时星芒更亮（buling buling）
@@ -299,19 +378,6 @@
       `translateX(${(-px * 16).toFixed(2)}px) scale(${(1 + act * 0.14) - Math.abs(px) * 0.05})`;
     shadow.style.opacity = (0.8 - tz * 0.006).toFixed(3);
 
-    // 国徽金属渐变随指针流转
-    if (goldGrad) {
-      const ang = 14 + px * 34 + py * 18;
-      goldGrad.setAttribute('gradientTransform', `rotate(${ang.toFixed(2)} 358.82 389.6)`);
-    }
-    // 帘子褶皱带随指针轻摆（与其他金属一致的"受光"反应）
-    const ribbonGrad = document.getElementById('ribbonGold');
-    if (ribbonGrad) {
-      ribbonGrad.setAttribute('gradientTransform', `rotate(${(px * 9).toFixed(2)} 358 660)`);
-    }
-    // 国徽镜面反射带：反光点与倾斜反向移动，像真实镀层
-    tilt.style.setProperty('--sheen-x', (50 - px * 52).toFixed(2) + '%');
-    tilt.style.setProperty('--sheen-y', (50 - py * 42).toFixed(2) + '%');
     tilt.style.setProperty('--sheen-o', (0.22 + mag * 0.6 * boost).toFixed(3));
 
     drawFX();
@@ -324,7 +390,7 @@
     card3d.style.transform = 'none';
     card3d.addEventListener('click', () => {
       flipped = !flipped;
-      tilt.style.transform = `rotateY(${flipped ? 180 : 0}deg)`;
+      flipEl.style.transform = `rotateY(${flipped ? 180 : 0}deg)`;
       card3d.setAttribute('aria-pressed', String(flipped));
     });
   } else {

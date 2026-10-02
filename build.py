@@ -269,14 +269,14 @@ def main() -> None:
     import shutil
     flag = build_flag()
     emblem = build_emblem()
-    with open(os.path.join(ROOT, "assets", "flag.svg"), "w", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "assets", "flag.svg"), "w", encoding="utf-8", newline="\n") as f:
         f.write(flag)
-    with open(os.path.join(ROOT, "assets", "emblem-gold.svg"), "w", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "assets", "emblem-gold.svg"), "w", encoding="utf-8", newline="\n") as f:
         f.write(emblem)
     shutil.copy(os.path.join(ROOT, "src", "style.css"), os.path.join(ROOT, "style.css"))
     shutil.copy(os.path.join(ROOT, "src", "main.js"), os.path.join(ROOT, "main.js"))
     shutil.copy(os.path.join(ROOT, "src", "sw.js"), os.path.join(ROOT, "sw.js"))
-    with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8", newline="\n") as f:
         f.write(build_html(flag, emblem))
 
     # PWA：五张方形图标（span 为星组占画布宽度比例；maskable 留足裁切安全区）
@@ -288,7 +288,7 @@ def main() -> None:
         ("apple-touch-icon.png", 180, 0.62),
     ]:
         build_icon(os.path.join(ROOT, "assets", name), size, span)
-    with open(os.path.join(ROOT, "manifest.webmanifest"), "w", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "manifest.webmanifest"), "w", encoding="utf-8", newline="\n") as f:
         f.write(build_manifest())
 
     print(f"flag.svg    {len(flag):>8,} bytes")
